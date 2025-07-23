@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>GPS Tracker Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      overflow-x: hidden;
+      background: #f0f0f0;
+    }
+
+    header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 50px;
+      background: #0078A8;
+      color: white;
+      display: flex;
+      align-items: center;
+      padding: 0 15px;
+      font-size: 20px;
+      font-weight: bold;
+      z-index: 11000;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      user-select: none;
+    }
+
+    #sidebar-hover-area {
+      position: fixed;
+      top: 50px;
+      left: 0;
+      height: calc(100vh - 50px);
+      width: 15px;
+      z-index: 10999;
+      background: transparent;
+    }
+
+    #sidebar {
+      position: fixed;
+      top: 50px;
+      left: -250px;
+      width: 250px;
+      height: calc(100vh - 50px);
+      background: #f9f9f9;
+      padding: 15px;
+      box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+      overflow-y: auto;
+      transition: left 0.3s ease;
+      z-index: 11000;
+    }
+
+    #sidebar:hover,
+    #sidebar-hover-area:hover + #sidebar {
+      left: 0;
+    }
+
+    /* Container that holds the map, centered with 80% width and height */
+    #map-container {
+      position: fixed;
+      top: 50px; /* below header */
+      left: 50%;
+      transform: translateX(-50%);
+      width: 80vw;
+      height: 80vh;
+      background: white;
+      box-shadow: 0 0 10px rgba(0,0,0,0.3);
+      transition: margin-left 0.3s ease, width 0.3s ease;
+      z-index: 1;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    /* Map fills entire container */
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* When sidebar is visible, push container right */
+    #sidebar:hover ~ #map-container,
+    #sidebar-hover-area:hover ~ #map-container {
+      margin-left: 250px;
+      width: calc(80vw - 250px);
+    }
+
+    h2 {
+      font-size: 18px;
+      margin-top: 0;
+      margin-bottom: 10px;
+    }
+
+    label {
+      display: flex;
+      align-items: center;
+      margin: 10px 0;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .pin {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 8px;
+      flex-shrink: 0;
+      border: 1px solid #333;
+    }
+  </style>
+</head>
+<body>
+
+  <header>🚀 GPS Tracking Map</header>
+
+  <div id="sidebar-hover-area"></div>
+
+  <div id="sidebar">
+    <h2>Devices</h2>
+    <div style="margin-bottom: 10px;">
+  <label style="display: flex; align-items: center;">
+    <input type="checkbox" id="displayAll" checked onchange="toggleAllDevices(this.checked)" />
+    <span style="margin-left: 8px;">Display All</span>
+  </label>
+</div>
+
+    <input type="text" id="searchBar" placeholder="Search device ID..." onkeyup="filterDeviceList()" style="width: 100%; padding: 6px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px;">
+    <div id="device-list"></div>
+  </div>
+
+  <div id="map-container">
+    <div id="map"></div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+ <script>
+  function getRandomColor() {
+    const hue = Math.floor(Math.random() * 360);
+    return `hsl(${hue}, 70%, 60%)`;
+  }
+
+  const map = L.map('map');
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: 'Map data © OpenStreetMap contributors',
+  }).addTo(map);
+
+  const markers = {};  // device_id => marker
+  const colors = {};   // device_id => color
+  const checkboxes = {}; // device_id => checkbox element
+
+  const deviceList = document.getElementById('device-list');
+
+  function updateDevices() {
+    fetch('/api/locations')
+      .then(res => res.json())
+      .then(data => {
+        const latlngs = [];
+
+        const newDeviceIds = new Set(data.map(d => d.device_id));
+        const oldDeviceIds = new Set(Object.keys(markers));
+
+        // Remove markers & checkboxes for devices no longer present
+        oldDeviceIds.forEach(id => {
+          if (!newDeviceIds.has(id)) {
+            map.removeLayer(markers[id]);
+            delete markers[id];
+
+            if (checkboxes[id]) {
+              checkboxes[id].parentElement.remove();
+              delete checkboxes[id];
+            }
+            if (colors[id]) delete colors[id];
+          }
+        });
+
+        data.forEach(device => {
+          const { device_id, latitude, longitude } = device;
+
+          // Assign color if new device
+          if (!colors[device_id]) {
+            colors[device_id] = getRandomColor();
+          }
+          const color = colors[device_id];
+          latlngs.push([latitude, longitude]);
+
+          if (markers[device_id]) {
+            // Update existing marker position
+            markers[device_id].setLatLng([latitude, longitude]);
+          } else {
+            // New device marker
+            const marker = L.marker([latitude, longitude])
+              .bindPopup(`<strong>${device_id}</strong>`)
+              .addTo(map);
+            markers[device_id] = marker;
+
+            // Create checkbox for new device
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.checked = true;
+            checkbox.id = `cb-${device_id}`;
+
+            checkbox.addEventListener('change', () => {
+              if (checkbox.checked) {
+                markers[device_id].addTo(map);
+              } else {
+                map.removeLayer(markers[device_id]);
+              }
+            });
+
+            const label = document.createElement('label');
+
+            const pin = document.createElement('span');
+            pin.className = 'pin';
+            pin.style.backgroundColor = color;
+
+            label.appendChild(checkbox);
+            label.appendChild(pin);
+            label.appendChild(document.createTextNode(` ${device_id}`));
+
+            deviceList.appendChild(label);
+            checkboxes[device_id] = checkbox;
+          }
+        });
+
+        // Fit map bounds to all markers if any
+        if (latlngs.length) {
+          const bounds = L.latLngBounds(latlngs);
+          map.fitBounds(bounds.pad(0.1));
+        }
+      })
+      .catch(err => console.error('Error loading map data:', err));
+  }
+
+  // Initial load
+  updateDevices();
+
+  // Refresh every 5 seconds
+  setInterval(updateDevices, 5000);
+</script>
+<script>
+  function filterDeviceList() {
+  document.getElementById("displayAll").checked = false;
+  const query = document.getElementById("searchBar").value.toLowerCase();
+    const query = document.getElementById("searchBar").value.toLowerCase();
+    const sidebar = document.getElementById("device-list");
+    const items = sidebar.getElementsByTagName("label");
+
+    for (let i = 0; i < items.length; i++) {
+      const label = items[i];
+      const id = label.textContent.trim().toLowerCase();
+      const checkbox = label.querySelector("input");
+
+      if (id.includes(query)) {
+        label.style.display = "flex";
+        if (markers[checkbox.id.replace('cb-', '')] && !map.hasLayer(markers[checkbox.id.replace('cb-', '')])) {
+          markers[checkbox.id.replace('cb-', '')].addTo(map);
+          checkbox.checked = true;
+        }
+      } else {
+        label.style.display = "none";
+        if (markers[checkbox.id.replace('cb-', '')] && map.hasLayer(markers[checkbox.id.replace('cb-', '')])) {
+          map.removeLayer(markers[checkbox.id.replace('cb-', '')]);
+          checkbox.checked = false;
+        }
+      }
+    }
+  }
+</script>
+<script>
+  function toggleAllDevices(showAll) {
+    const sidebar = document.getElementById("device-list");
+    const items = sidebar.getElementsByTagName("label");
+
+    for (let i = 0; i < items.length; i++) {
+      const label = items[i];
+      const checkbox = label.querySelector("input");
+      const deviceId = checkbox.id.replace('cb-', '');
+
+      label.style.display = "flex";
+      checkbox.checked = showAll;
+
+      if (markers[deviceId]) {
+        if (showAll) {
+          markers[deviceId].addTo(map);
+        } else {
+          map.removeLayer(markers[deviceId]);
+        }
+      }
+    }
+
+    document.getElementById("searchBar").value = ""; // clear search input
+  }
+</script>
+
+
+</body>
+</html>
