@@ -1,0 +1,222 @@
+<!-- admin.html -->
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Admin Dashboard</title>
+  <style>
+    body { font-family: Arial; padding: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background-color: #f2f2f2; }
+    .logout { float: right; }
+    .add-btn { margin-top: 10px; padding: 5px 10px; }
+    input[type="text"] { width: 100%; box-sizing: border-box; }
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1;
+      left: 0; top: 0;
+      width: 100%; height: 100%;
+      overflow: auto;
+      background-color: rgba(0,0,0,0.4);
+    }
+    .modal-content {
+      background-color: #fff;
+      margin: 10% auto;
+      padding: 20px;
+      border: 1px solid #888;
+      width: 300px;
+    }
+    .modal input {
+      margin-bottom: 10px;
+      width: 100%;
+      padding: 5px;
+    }
+  </style>
+</head>
+<body>
+  <h2>Welcome Admin</h2>
+  <a href="/logout" class="logout">Logout</a>
+
+  <h3>Current Location</h3>
+  <div id="current_location"></div>
+  <button class="add-btn" onclick="openModal('current_location')">Add Row</button>
+
+  <h3>Officers In Charge</h3>
+  <div id="officers"></div>
+  <button class="add-btn" onclick="openModal('officers')">Add Row</button>
+
+  <h3>Landmarks</h3>
+  <div id="landmarks"></div>
+  <button class="add-btn" onclick="openModal('landmarks')">Add Row</button>
+
+  <h3>Access Table</h3>
+  <div id="access"></div>
+  <button class="add-btn" onclick="openModal('access')">Add Row</button>
+
+  <h3>Allotment</h3>
+  <div id="allotment"></div>
+  <button class="add-btn" onclick="openModal('allotment')">Add Row</button>
+
+  <!-- Add Modal -->
+  <div id="modal" class="modal">
+    <div class="modal-content">
+      <h3>Add Row</h3>
+      <form id="modal-form"></form>
+      <button type="button" onclick="submitRow()">Save</button>
+      <button type="button" onclick="closeModal()">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Edit Modal -->
+  <div id="edit-modal" class="modal">
+    <div class="modal-content">
+      <h3>Edit Row</h3>
+      <form id="edit-form"></form>
+      <button type="button" onclick="submitEdit()">Save</button>
+      <button type="button" onclick="closeEditModal()">Cancel</button>
+    </div>
+  </div>
+
+  <script>
+    const columnsMap = {
+      current_location: ['device_id', 'name', 'latitude', 'longitude', 'nearest_landmark', 'battery', 'timestamp'],
+      officers: ['officer_id', 'officer_name', 'officer_contact', 'device_name', 'device_contact'],
+      landmarks: ['landmark_id', 'name', 'latitude', 'longitude'],
+      access: ['officer_id','officer_name', 'user_name', 'password'],
+      allotment: ['officer_id', 'device_id']
+    };
+
+    let currentTable = '';
+
+    function openModal(tableId) {
+      currentTable = tableId;
+      const form = document.getElementById('modal-form');
+      form.innerHTML = '';
+      columnsMap[tableId].forEach(col => {
+        const input = document.createElement('input');
+        input.name = col;
+        input.placeholder = col;
+        form.appendChild(input);
+      });
+      document.getElementById('modal').style.display = 'block';
+    }
+
+    function closeModal() {
+      document.getElementById('modal').style.display = 'none';
+    }
+
+    function submitRow() {
+      const inputs = document.querySelectorAll('#modal-form input');
+      const values = Array.from(inputs).map(input => input.value.trim());
+      const payload = { table: currentTable, values };
+
+      fetch('/admin/update_table', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).then(res => res.json()).then(resp => {
+        if (resp.status === 'success') {
+          alert('Row saved successfully');
+          fetchTable(`/admin/${currentTable}`, currentTable);
+          closeModal();
+        } else {
+          alert('Error saving row: ' + resp.message);
+        }
+      });
+    }
+
+    function fetchTable(route, container) {
+      fetch(route).then(res => res.text()).then(html => {
+        document.getElementById(container).innerHTML = html;
+      });
+    }
+
+    ['current_location', 'officers', 'landmarks', 'access', 'allotment'].forEach(t => {
+      fetchTable(`/admin/${t}`, t);
+    });
+
+    let currentEditId = '';
+    let currentEditTable = '';
+    let currentEditColumns = [];
+
+    function editRow(table, id) {
+      currentEditId = id;
+      currentEditTable = table;
+      currentEditColumns = columnsMap[table];
+
+      const row = document.querySelector(`#row-${id}`);
+      const cells = row.querySelectorAll('td');
+      const form = document.getElementById('edit-form');
+      form.innerHTML = '';
+
+      currentEditColumns.forEach((col, i) => {
+        const input = document.createElement('input');
+        input.name = col;
+        input.value = cells[i].innerText;
+        input.placeholder = col;
+        form.appendChild(input);
+      });
+
+      document.getElementById('edit-modal').style.display = 'block';
+    }
+
+    function closeEditModal() {
+      document.getElementById('edit-modal').style.display = 'none';
+    }
+
+    function submitEdit() {
+      const inputs = document.querySelectorAll('#edit-form input');
+      const updates = {};
+      inputs.forEach(input => {
+        updates[input.name] = input.value.trim();
+      });
+
+      const keyParts = currentEditId.split('_');
+      const key_column = currentEditColumns[0];
+      const key_value = keyParts[0];
+      const key_column2 = currentEditColumns.length === 2 ? currentEditColumns[1] : null;
+      const key_value2 = keyParts.length > 1 ? keyParts[1] : null;
+
+      const payload = {
+        table: currentEditTable,
+        updates,
+        key_column,
+        key_value
+      };
+
+      if (key_column2 && key_value2) {
+        payload.key_column2 = key_column2;
+        payload.key_value2 = key_value2;
+      }
+
+      fetch('/admin/edit_row', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).then(res => res.json()).then(resp => {
+        if (resp.status === 'success') {
+          closeEditModal();
+          fetchTable(`/admin/${currentEditTable}`, currentEditTable);
+        } else {
+          alert('Error: ' + resp.message);
+        }
+      });
+    }
+
+    function deleteRow(table, key_column, key_value) {
+      fetch('/admin/delete_row', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ table, key_column, key_value })
+      }).then(res => res.json()).then(resp => {
+        if (resp.status === 'success') {
+          fetchTable(`/admin/${table}`, table);
+        } else {
+          alert('Delete error: ' + resp.message);
+        }
+      });
+    }
+  </script>
+</body>
+</html>

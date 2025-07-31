@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pune Ganpati Tracker</title>
+    
+    <!-- Leaflet CSS for the interactive map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+     crossorigin=""/>
+     
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts: Poppins -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* Custom styles to ensure the map fills the screen and for the font */
+        body {
+            font-family: 'Poppins', sans-serif;
+            overflow: hidden; /* Prevents scrollbars from appearing */
+        }
+        #map { 
+            height: 100vh; 
+            width: 100vw;
+            z-index: 10;
+        }
+        .leaflet-popup-content-wrapper {
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .leaflet-popup-content {
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .popup-title {
+            font-weight: 700;
+            font-size: 18px;
+            margin-bottom: 8px;
+            color: #8338ec;
+        }
+        .popup-status {
+            font-weight: 600;
+            color: #2a9d8f;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <div id="map"></div>
+
+    <!-- Info Panel -->
+    <div class="absolute top-5 left-1/2 -translate-x-1/2 z-20 bg-white/90 backdrop-blur-sm p-4 rounded-2xl shadow-xl border border-gray-200 w-11/12 max-w-md">
+        <h1 class="text-2xl font-bold text-center text-gray-800">
+            <span class="text-orange-500">Pune</span> Ganpati Tracker <span class="text-green-500">2025</span>
+        </h1>
+        <p class="text-center text-gray-600 mt-1 text-sm">Live simulated tracking of famous Ganpati Mandals.</p>
+    </div>
+
+    <!-- Leaflet JavaScript -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+     crossorigin=""></script>
+
+    <script>
+        // --- 1. INITIAL SETUP & DATABASE SIMULATION ---
+        // This section simulates a database of Ganpati mandals.
+        // In a real Python application, this data would come from a database like PostgreSQL or MySQL
+        // via a Flask/Django API endpoint.
+        const ganpatiMandals = [
+            {
+                id: 1,
+                name: "Kasba Ganpati (मानाचा पहिला)",
+                lat: 18.5195,
+                lng: 73.8567,
+                marker: null
+            },
+            {
+                id: 2,
+                name: "Tambdi Jogeshwari (मानाचा दुसरा)",
+                lat: 18.5170,
+                lng: 73.8588,
+                marker: null
+            },
+            {
+                id: 3,
+                name: "Guruji Talim (मानाचा तिसरा)",
+                lat: 18.5221,
+                lng: 73.8575,
+                marker: null
+            },
+            {
+                id: 4,
+                name: "Tulsibaug Ganpati (मानाचा चौथा)",
+                lat: 18.5164,
+                lng: 73.8562,
+                marker: null
+            },
+            {
+                id: 5,
+                name: "Kesari Wada (मानाचा पाचवा)",
+                lat: 18.5138,
+                lng: 73.8525,
+                marker: null
+            },
+            {
+                id: 6,
+                name: "Dagdusheth Halwai Ganpati",
+                lat: 18.5158,
+                lng: 73.8560,
+                marker: null
+            }
+        ];
+
+        // --- 2. MAP INITIALIZATION ---
+        // Center the map on Pune
+        const map = L.map('map').setView([18.5204, 73.8567], 14);
+
+        // Add the map background (tile layer) from OpenStreetMap
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // --- 3. ADDING MARKERS TO THE MAP ---
+        // Create a custom icon for the Ganpati idols
+        const ganpatiIcon = L.icon({
+            iconUrl: 'https://img.icons8.com/external-flaticons-lineal-color-flat-icons/64/000000/external-ganesha-hinduism-flaticons-lineal-color-flat-icons.png',
+            iconSize: [48, 48], // size of the icon
+            iconAnchor: [24, 48], // point of the icon which will correspond to marker's location
+            popupAnchor: [0, -48] // point from which the popup should open relative to the iconAnchor
+        });
+
+        // Loop through our simulated database and add each mandal to the map
+        ganpatiMandals.forEach(mandal => {
+            mandal.marker = L.marker([mandal.lat, mandal.lng], { icon: ganpatiIcon }).addTo(map);
+            
+            // Create a popup with information for each marker
+            const popupContent = `
+                <div class="popup-title">${mandal.name}</div>
+                <div>Status: <span class="popup-status">Moving</span></div>
+                <div class="text-xs text-gray-500 mt-2">Lat: ${mandal.lat.toFixed(4)}, Lng: ${mandal.lng.toFixed(4)}</div>
+            `;
+            mandal.marker.bindPopup(popupContent);
+        });
+
+        // --- 4. GPS TRACKER SIMULATION ---
+        // This function simulates receiving new GPS coordinates.
+        // In a real application, a Python script on a server would receive data from a
+        // physical GPS tracker and update the database. The website would then fetch this new data.
+        function simulateGpsUpdates() {
+            ganpatiMandals.forEach(mandal => {
+                // Randomly change latitude and longitude by a small amount
+                const latChange = (Math.random() - 0.5) * 0.0002;
+                const lngChange = (Math.random() - 0.5) * 0.0002;
+
+                mandal.lat += latChange;
+                mandal.lng += lngChange;
+
+                // Update the marker's position on the map
+                const newLatLng = new L.LatLng(mandal.lat, mandal.lng);
+                mandal.marker.setLatLng(newLatLng);
+
+                // Update the popup content with the new coordinates
+                const newPopupContent = `
+                    <div class="popup-title">${mandal.name}</div>
+                    <div>Status: <span class="popup-status">Moving</span></div>
+                    <div class="text-xs text-gray-500 mt-2">Lat: ${mandal.lat.toFixed(4)}, Lng: ${mandal.lng.toFixed(4)}</div>
+                `;
+                mandal.marker.setPopupContent(newPopupContent);
+            });
+        }
+
+        // --- 5. START THE REAL-TIME UPDATES ---
+        // Call the simulation function every 2 seconds (2000 milliseconds)
+        // This creates the "live tracking" effect.
+        setInterval(simulateGpsUpdates, 2000);
+
+    </script>
+
+</body>
+</html>
